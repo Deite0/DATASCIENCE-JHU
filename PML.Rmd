@@ -1,0 +1,101 @@
+---
+Output: html file
+Title: Practical Machine Learning / W4 Peer reviewed Assignment
+---
+
+## Background & Objective
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Acquisition & Transformation
+
+Setting working directory / Caret package and data loading:
+
+```{r}
+setwd("C:/Documents/d.wong/Documents/Practical Machine Learning/W4 Submission")
+library(caret)
+TrainDB <- read.csv("pml-training.csv")
+TestDB <- read.csv("pml-testing.csv")
+```
+
+Creation of a smaller training Data Base (80% of the initial DB) for out-of-sample estimation:
+
+```{r}
+set.seed(1)
+inTrain <- createDataPartition(y=TrainDB$classe, p=0.8, list=F)
+TrainDB1 <- TrainDB[inTrain, ]
+TrainDB2 <- TrainDB[-inTrain, ]
+```
+
+
+I am now going to reduce the number of features by removing variables with nearly zero variance, variables that are almost always NA, and variables that don't make intuitive sense for prediction. Note that I decide which ones to remove by analyzing ptrain1, and perform the identical removals on ptrain2:
+
+```{r}
+# removal of non explanatory variables (with nearly zero variance in the training DB) 
+NZV <- nearZeroVar(TrainDB1)
+TrainDB1b <- TrainDB1[, -NZV]
+TrainDB2b <- TrainDB2[, -NZV]
+# removal of mostly missing variables
+NaVar <- sapply(TrainDB1b, function(x) mean(is.na(x))) >= 0.95
+TrainDB1c <- TrainDB1b[, NaVar==F]
+TrainDB2c <- TrainDB2b[, NaVar==F]
+# removal of auxilary data (5 first data)
+TrainDB1d <- TrainDB1c[, -(1:5)]
+TrainDB2d <- TrainDB2c[, -(1:5)]
+```
+
+## Model Training
+
+Initial Model: Random Forest with 3-fold cross-validation / Database: TrainDB1d
+
+```{r}
+# training parameters
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+# model training with all variable available
+fit <- train(classe ~ ., data=TrainDB1d, method="rf", trControl=fitControl)
+# print final model to see tuning parameters it chose
+fit$finalModel
+```
+
+
+## Model Evaluation and Selection
+
+The fitted model to predict "classe" is applied to TrainDB2d and Predicted vers actual values are compared:
+
+```{r}
+# application of the model to TrainDB2d
+preds <- predict(fit, newdata=TrainDB2d)
+# Out-of-sample error
+confusionMatrix(TrainDB2d$classe, preds)
+```
+
+The model acuracy is above 99.6%. Since results are satisfactory. The random forests methodology will be applied to the test data base.
+
+## Second training: Training on the overall training DB
+
+```{r}
+# removal of variables with nearly zero variance, almost NA variable, and non pertinent variables
+NZV <- nearZeroVar(TrainDB)
+TrainDB <- TrainDB[, -NZV]
+TestDB <- TestDB[, -NZV]
+NaVar <- sapply(TrainDB, function(x) mean(is.na(x))) >= 0.95
+TrainDB <- TrainDB[, NaVar==F]
+TestDB <- TestDB[, NaVar==F]
+TrainDB <- TrainDB[, -(1:5)]
+TestDB <- TestDB[, -(1:5)]
+# model fitting with full training set
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+fit <- train(classe ~ ., data=TrainDB, method="rf", trControl=fitControl)
+```
+
+## Predictions of the model (RF with 3-fold cross-validation) on Test Set
+
+```{r}
+# prediction on test set and export
+preds <- as.character(predict(fit, newdata=TestDB))
+n<-length(preds);n
+    for(i in 1:n) {
+        filename <- paste0("id_", i, ".txt")
+        write.table(preds[i], file=filename, quote=F, row.names=F, col.names=F)
+    }
+```
